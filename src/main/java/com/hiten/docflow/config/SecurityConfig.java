@@ -1,12 +1,11 @@
 package com.hiten.docflow.config;
 
 import com.hiten.docflow.security.JwtFilter;
-import com.hiten.docflow.security.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -17,23 +16,16 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * SecurityConfig — The master rulebook for who can access what.
+ * SecurityConfig (Simplified)
  *
- * KEY CONCEPTS:
+ * KEY LESSON: In Spring Boot 3, you should NOT manually create
+ * a DaoAuthenticationProvider @Bean. Spring Boot auto-wires your
+ * UserDetailsService + PasswordEncoder together automatically.
+ * Creating it manually causes a conflict with auto-configuration
+ * that breaks public endpoints.
  *
- * 1. STATELESS session: REST APIs don't use sessions/cookies.
- *    Each request must carry its own token. This is the industry standard.
- *
- * 2. CSRF disabled: CSRF attacks exploit browser cookies/sessions.
- *    Since we're stateless (no sessions), CSRF doesn't apply.
- *
- * 3. JwtFilter runs BEFORE UsernamePasswordAuthenticationFilter:
- *    Our filter intercepts the request, reads the token, and tells
- *    Spring Security who is making the request.
- *
- * WHAT IS PERMITTED:
- *   /api/auth/**  → public (anyone can register/login)
- *   everything else → requires valid JWT token
+ * The right approach: just define UserDetailsService (@Service) and
+ * PasswordEncoder (@Bean), and Spring Boot handles the rest.
  */
 @Configuration
 @EnableWebSecurity
@@ -42,45 +34,51 @@ public class SecurityConfig {
     @Autowired
     private JwtFilter jwtFilter;
 
-    @Autowired
-    private UserDetailsServiceImpl userDetailsService;
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())                           // Disable CSRF (not needed for REST)
+            .csrf(csrf -> csrf.disable())                         // No CSRF needed for REST
             .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // No sessions!
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // No sessions
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()        // Login/Register: open to all
-                .anyRequest().authenticated()                      // Everything else: needs token
+                .requestMatchers("/api/auth/register", "/api/auth/login", "/error").permitAll()
+                .anyRequest().authenticated()                     // All other routes → need token
             )
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class); // Add our filter
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // BCrypt: industry standard password hashing algorithm
-    // Same password hashed twice gives different results (uses salt)
+    // BCrypt password hasher — Spring Boot auto-detects this
+    // and uses it alongside UserDetailsServiceImpl for authentication
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // Wires together: UserDetailsService + PasswordEncoder for authentication
-    @Bean
-    public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
-        return provider;
-    }
-
-    // AuthenticationManager is what AuthService uses to verify login credentials
+    // AuthService needs this to call authenticationManager.authenticate()
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
             throws Exception {
         return config.getAuthenticationManager();
+    }
+
+    /**
+     * CRITICAL FIX: Prevent double filter registration.
+     *
+     * JwtFilter has @Component, so Spring Boot auto-registers it
+     * in the SERVLET filter chain (which runs before Spring Security).
+     * We also manually add it inside the security chain via addFilterBefore.
+     * Result: the filter runs TWICE — once outside security, once inside.
+     * The first run (outside security) interferes before security rules apply.
+     *
+     * This bean tells Spring Boot: "Don't auto-register JwtFilter as a
+     * servlet filter — we're registering it manually inside security."
+     */
+    @Bean
+    public FilterRegistrationBean<JwtFilter> jwtFilterRegistration(JwtFilter jwtFilter) {
+        FilterRegistrationBean<JwtFilter> registration = new FilterRegistrationBean<>(jwtFilter);
+        registration.setEnabled(false); // Disable auto servlet registration
+        return registration;
     }
 }

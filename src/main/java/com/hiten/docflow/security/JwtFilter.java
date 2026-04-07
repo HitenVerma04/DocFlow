@@ -15,18 +15,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * JwtFilter — The Security Guard at the Door
+ * JwtFilter — runs on EVERY request before the Controller
  *
- * This runs on EVERY incoming HTTP request, BEFORE it reaches your Controller.
- * It checks:
- *   1. Is there an "Authorization" header?
- *   2. Does it start with "Bearer "? (JWT standard format)
- *   3. Is the token valid?
- *   4. If all yes → let the request through as authenticated
- *   5. If no → the request continues but as anonymous (SecurityConfig will block it)
+ * If no token → passes through (SecurityConfig decides if route needs auth)
+ * If token present → validates it → marks user as authenticated
  *
- * Request flow with filter:
- *   HTTP Request → JwtFilter → SecurityConfig checks → Controller
+ * IMPORTANT: This filter should NEVER block a request itself.
+ * Blocking is SecurityConfig's job. This filter only AUTHENTICATES.
  */
 @Component
 public class JwtFilter extends OncePerRequestFilter {
@@ -43,36 +38,35 @@ public class JwtFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
-        // Step 1: Get the Authorization header
-        // It should look like: "Bearer eyJhbGciOi..."
-        String authHeader = request.getHeader("Authorization");
+        try {
+            String authHeader = request.getHeader("Authorization");
 
-        String token = null;
-        String username = null;
+            String token = null;
+            String username = null;
 
-        // Step 2: Extract the token from the header
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7); // Remove "Bearer " prefix
-            username = jwtUtil.extractUsername(token);
-        }
-
-        // Step 3: If we found a valid username and user isn't already authenticated
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-
-            // Step 4: Validate the token
-            if (jwtUtil.isTokenValid(token, userDetails.getUsername())) {
-                // Step 5: Tell Spring Security this request is authenticated
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails, null, userDetails.getAuthorities());
-
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+                username = jwtUtil.extractUsername(token);
             }
+
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+                if (jwtUtil.isTokenValid(token, userDetails.getUsername())) {
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            }
+        } catch (Exception e) {
+            // If ANYTHING goes wrong reading the token, just continue without authentication.
+            // SecurityConfig will handle blocking if the route requires auth.
+            // This prevents a bad token from crashing requests to public endpoints.
+            logger.warn("JWT filter error (non-critical): " + e.getMessage());
         }
 
-        // Step 6: Continue to the next filter / controller
         filterChain.doFilter(request, response);
     }
 }
