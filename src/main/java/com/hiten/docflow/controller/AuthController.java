@@ -25,8 +25,10 @@ public class AuthController {
     private AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody AuthRequest request) {
-        return ResponseEntity.ok(authService.register(request));
+    public ResponseEntity<AuthResponse> register(
+            @Valid @RequestBody AuthRequest request,
+            @RequestParam(defaultValue = "PATIENT") String role) {
+        return ResponseEntity.ok(authService.register(request, role));
     }
 
     @PostMapping("/login")

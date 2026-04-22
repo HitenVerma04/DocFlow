@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * Doctor Controller (Floor 3 - The Receptionist)
@@ -22,12 +23,12 @@ public class DoctorController {
     @Autowired
     private DoctorService doctorService;
 
-    // POST /api/doctors
-    // Body: { "name": "Dr. Sharma", "specialization": "Cardiologist", "phone": "9876543210" }
+    // Only ADMIN can add doctors
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<Doctor> addDoctor(@RequestBody Doctor doctor) {
         Doctor saved = doctorService.addDoctor(doctor);
-        return new ResponseEntity<>(saved, HttpStatus.CREATED); // 201
+        return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
     // GET /api/doctors → returns all doctors
@@ -48,14 +49,15 @@ public class DoctorController {
         return new ResponseEntity<>(doctorService.getDoctorsBySpecialization(specialization), HttpStatus.OK);
     }
 
-    // PUT /api/doctors/1
-    // Body: updated doctor data
+    // Only ADMIN can update doctors
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<Doctor> updateDoctor(@PathVariable Long id, @RequestBody Doctor doctor) {
         return new ResponseEntity<>(doctorService.updateDoctor(id, doctor), HttpStatus.OK);
     }
 
-    // DELETE /api/doctors/1
+    // Only ADMIN can delete doctors
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteDoctor(@PathVariable Long id) {
         doctorService.deleteDoctor(id);

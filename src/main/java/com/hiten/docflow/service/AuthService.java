@@ -40,19 +40,19 @@ public class AuthService {
     private AuthenticationManager authenticationManager;
 
     // REGISTER
-    public AuthResponse register(AuthRequest request) {
+    public AuthResponse register(AuthRequest request, String role) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new RuntimeException("Username already taken!");
         }
 
         User user = new User();
         user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword())); // HASH the password!
-        user.setRole("PATIENT"); // default role
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(role.toUpperCase()); // e.g. "PATIENT" or "ADMIN"
 
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(user.getUsername());
+        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
         return new AuthResponse(token);
     }
 
@@ -67,7 +67,11 @@ public class AuthService {
                 )
         );
 
-        String token = jwtUtil.generateToken(request.getUsername());
+        // Fetch user to get their role
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        String token = jwtUtil.generateToken(request.getUsername(), user.getRole());
         return new AuthResponse(token);
     }
 }

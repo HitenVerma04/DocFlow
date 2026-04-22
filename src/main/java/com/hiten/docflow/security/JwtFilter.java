@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -13,15 +14,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
- * JwtFilter — runs on EVERY request before the Controller
+ * JwtFilter — runs on EVERY request, checks for a valid Bearer token.
  *
- * If no token → passes through (SecurityConfig decides if route needs auth)
- * If token present → validates it → marks user as authenticated
- *
- * IMPORTANT: This filter should NEVER block a request itself.
- * Blocking is SecurityConfig's job. This filter only AUTHENTICATES.
+ * Module 10 addition: also reads the ROLE from the token and tells
+ * Spring Security about it. This is what makes @PreAuthorize work —
+ * Spring Security checks the user's authorities (roles) against the
+ * annotation's requirement.
  */
 @Component
 public class JwtFilter extends OncePerRequestFilter {
@@ -40,7 +41,6 @@ public class JwtFilter extends OncePerRequestFilter {
 
         try {
             String authHeader = request.getHeader("Authorization");
-
             String token = null;
             String username = null;
 
@@ -53,18 +53,26 @@ public class JwtFilter extends OncePerRequestFilter {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
                 if (jwtUtil.isTokenValid(token, userDetails.getUsername())) {
+
+                    // Extract role from token (e.g. "ADMIN", "PATIENT")
+                    String role = jwtUtil.extractRole(token);
+
+                    // Spring Security requires roles to be prefixed with "ROLE_"
+                    // So "ADMIN" becomes "ROLE_ADMIN" — this is what @PreAuthorize("hasRole('ADMIN')") checks
+                    List<SimpleGrantedAuthority> authorities = List.of(
+                            new SimpleGrantedAuthority("ROLE_" + role)
+                    );
+
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
-                                    userDetails, null, userDetails.getAuthorities());
+                                    userDetails, null, authorities);  // authorities passed here!
+
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
         } catch (Exception e) {
-            // If ANYTHING goes wrong reading the token, just continue without authentication.
-            // SecurityConfig will handle blocking if the route requires auth.
-            // This prevents a bad token from crashing requests to public endpoints.
-            logger.warn("JWT filter error (non-critical): " + e.getMessage());
+            logger.warn("JWT filter error: " + e.getMessage());
         }
 
         filterChain.doFilter(request, response);
