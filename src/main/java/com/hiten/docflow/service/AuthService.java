@@ -10,6 +10,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.hiten.docflow.exception.DuplicateResourceException;
 
 /**
  * AuthService — handles register and login
@@ -42,7 +43,7 @@ public class AuthService {
     // REGISTER
     public AuthResponse register(AuthRequest request, String role) {
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username already taken!");
+            throw new DuplicateResourceException("Username already taken!");
         }
 
         User user = new User();

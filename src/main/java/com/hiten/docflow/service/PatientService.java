@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import com.hiten.docflow.exception.ResourceNotFoundException;
+import com.hiten.docflow.exception.DuplicateResourceException;
 
 /**
  * Patient Service (Floor 2 - The Manager)
@@ -25,7 +27,7 @@ public class PatientService {
     public Patient addPatient(Patient patient) {
         // Business logic: Check if phone number already exists
         if (patientRepository.existsByPhone(patient.getPhone())) {
-            throw new RuntimeException("Patient with this phone number already exists!");
+            throw new DuplicateResourceException("Patient with this phone number already exists!");
         }
         return patientRepository.save(patient); // Saves to database
     }
@@ -41,7 +43,7 @@ public class PatientService {
         if (patient.isPresent()) {
             return patient.get();
         } else {
-            throw new RuntimeException("Patient not found with id: " + id);
+            throw new ResourceNotFoundException("Patient not found with id: " + id);
         }
     }
 

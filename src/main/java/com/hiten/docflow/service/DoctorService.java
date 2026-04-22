@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import com.hiten.docflow.exception.ResourceNotFoundException;
+import com.hiten.docflow.exception.DuplicateResourceException;
 
 /**
  * Doctor Service (Floor 2 - The Manager)
@@ -23,7 +25,7 @@ public class DoctorService {
     // CREATE - Add a new doctor
     public Doctor addDoctor(Doctor doctor) {
         if (doctorRepository.existsByPhone(doctor.getPhone())) {
-            throw new RuntimeException("Doctor with this phone number already exists!");
+            throw new DuplicateResourceException("Doctor with this phone number already exists!");
         }
         return doctorRepository.save(doctor);
     }
@@ -39,7 +41,7 @@ public class DoctorService {
         if (doctor.isPresent()) {
             return doctor.get();
         } else {
-            throw new RuntimeException("Doctor not found with id: " + id);
+            throw new ResourceNotFoundException("Doctor not found with id: " + id);
         }
     }
 
