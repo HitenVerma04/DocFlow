@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * @ExceptionHandler(SomeException.class) = "when THIS exception is thrown anywhere,
  * run this method instead of the default behavior"
  */
-@RestControllerAdvice
+// basePackages limits this to OUR controllers only
+// Without this, it catches Springdoc's internal exceptions too → breaks Swagger UI
+@RestControllerAdvice(basePackages = "com.hiten.docflow.controller")
 public class GlobalExceptionHandler {
 
     // 404 — Something wasn't found
